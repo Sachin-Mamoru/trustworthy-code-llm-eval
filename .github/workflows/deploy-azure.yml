@@ -1,0 +1,78 @@
+name: Deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AZURE_RESOURCE_GROUP: trustworthy-code-llm-rg
+  AZURE_CONTAINER_REGISTRY: trustworthycollm
+  AZURE_CONTAINER_APP: trustworthy-code-app
+  AZURE_CONTAINER_ENV: trustworthy-code-env
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Build and push to ACR
+      run: |
+        az acr build \
+          --registry ${{ env.AZURE_CONTAINER_REGISTRY }} \
+          --image trustworthy-code-llm:${{ github.sha }} \
+          --image trustworthy-code-llm:latest \
+          --file Dockerfile \
+          .
+
+    - name: Deploy to Container Apps
+      run: |
+        az containerapp update \
+          --name ${{ env.AZURE_CONTAINER_APP }} \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/trustworthy-code-llm:${{ github.sha }}
+
+    - name: Verify deployment
+      run: |
+        # Get the app URL
+        APP_URL=$(az containerapp show \
+          --name ${{ env.AZURE_CONTAINER_APP }} \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --query properties.configuration.ingress.fqdn \
+          --output tsv)
+        
+        # Wait for deployment to be ready
+        echo "Waiting for deployment to be ready..."
+        sleep 30
+        
+        # Test health endpoint
+        curl -f https://$APP_URL/health || exit 1
+        
+        echo "✅ Deployment successful!"
+        echo "🌐 Application URL: https://$APP_URL"
+
+    - name: Create deployment summary
+      run: |
+        APP_URL=$(az containerapp show \
+          --name ${{ env.AZURE_CONTAINER_APP }} \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --query properties.configuration.ingress.fqdn \
+          --output tsv)
+        
+        echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Status**: ✅ Successful" >> $GITHUB_STEP_SUMMARY
+        echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **URL**: https://$APP_URL" >> $GITHUB_STEP_SUMMARY
+        echo "- **API Docs**: https://$APP_URL/api/docs" >> $GITHUB_STEP_SUMMARY
+        echo "- **Health Check**: https://$APP_URL/health" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### 🎯 Ready for Testing!" >> $GITHUB_STEP_SUMMARY
+        echo "Your supervisor can now test the production deployment." >> $GITHUB_STEP_SUMMARY

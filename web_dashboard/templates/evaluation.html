@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrustworthyCodeLLM - Production Evaluation</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: #333;
+        }
+        .header h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+        .form-group {
+            margin-bottom: 25px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 1.1em;
+        }
+        textarea, input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            transition: border-color 0.3s ease;
+            box-sizing: border-box;
+        }
+        textarea:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: 600;
+            transition: transform 0.2s ease;
+            width: 100%;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .results {
+            margin-top: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 5px solid #667eea;
+        }
+        .score {
+            font-size: 1.4em;
+            font-weight: bold;
+            margin: 15px 0;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .score.excellent { background: #d4edda; color: #155724; border: 2px solid #c3e6cb; }
+        .score.good { background: #d1ecf1; color: #0c5460; border: 2px solid #bee5eb; }
+        .score.fair { background: #fff3cd; color: #856404; border: 2px solid #ffeaa7; }
+        .score.poor { background: #f8d7da; color: #721c24; border: 2px solid #f5c6cb; }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .metric-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .metric-title {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+        .metric-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 TrustworthyCodeLLM</h1>
+            <p>Production-Ready Code Evaluation Platform</p>
+            <p><small>Real-time analysis for your supervisor's review</small></p>
+        </div>
+        
+        <form id="evaluationForm">
+            <div class="form-group">
+                <label for="problem">📋 Problem Description:</label>
+                <textarea id="problem" name="problem_description" rows="4" 
+                         placeholder="Describe the coding problem or task you're solving..." required></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="code">💻 Python Code to Evaluate:</label>
+                <textarea id="code" name="code" rows="20" 
+                         placeholder="Enter your Python code here..." required></textarea>
+            </div>
+            
+            <button type="submit" id="submitBtn">🚀 Evaluate Code Quality</button>
+        </form>
+        
+        <div id="results" class="results" style="display: none;">
+            <h3>📊 Evaluation Results</h3>
+            <div id="resultsContent"></div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('evaluationForm');
+            const button = document.getElementById('submitBtn');
+            const results = document.getElementById('results');
+            const content = document.getElementById('resultsContent');
+            
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                console.log('Form submission intercepted');
+                
+                const formData = new FormData(form);
+                const codeValue = formData.get('code');
+                const problemValue = formData.get('problem_description');
+                
+                console.log('Code length:', codeValue ? codeValue.length : 0);
+                console.log('Problem:', problemValue);
+                
+                if (!codeValue || !problemValue) {
+                    alert('Please fill in both fields');
+                    return;
+                }
+                
+                // Show loading state
+                button.disabled = true;
+                button.textContent = '⏳ Analyzing Code...';
+                results.style.display = 'block';
+                content.innerHTML = '<div class="loading">🔍 Running comprehensive analysis...</div>';
+                
+                try {
+                    console.log('Sending POST request...');
+                    const response = await fetch('/evaluate', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    console.log('Response status:', response.status);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Response data:', data);
+                
+                if (response.ok) {
+                    let html = '';
+                    
+                    // Overall score
+                    const score = data.overall_score;
+                    let scoreClass = 'poor';
+                    if (score >= 0.8) scoreClass = 'excellent';
+                    else if (score >= 0.6) scoreClass = 'good';
+                    else if (score >= 0.4) scoreClass = 'fair';
+                    
+                    html += `<div class="score ${scoreClass}">
+                        Overall Score: ${(score * 100).toFixed(1)}% 
+                        ${score >= 0.8 ? '🌟' : score >= 0.6 ? '👍' : score >= 0.4 ? '⚠️' : '❌'}
+                    </div>`;
+                    
+                    // Structure Analysis
+                    if (data.structure_analysis) {
+                        const struct = data.structure_analysis;
+                        html += '<h4>📊 Code Structure Analysis</h4>';
+                        html += `<p><strong>Score:</strong> ${(struct.score * 100).toFixed(1)}%</p>`;
+                        html += `<p>${struct.feedback}</p>`;
+                        
+                        if (struct.metrics) {
+                            html += '<div class="metrics">';
+                            html += `<div class="metric-card">
+                                <div class="metric-title">Functions</div>
+                                <div class="metric-value">${struct.metrics.functions}</div>
+                            </div>`;
+                            html += `<div class="metric-card">
+                                <div class="metric-title">Classes</div>
+                                <div class="metric-value">${struct.metrics.classes}</div>
+                            </div>`;
+                            html += `<div class="metric-card">
+                                <div class="metric-title">Lines of Code</div>
+                                <div class="metric-value">${struct.metrics.lines}</div>
+                            </div>`;
+                            html += `<div class="metric-card">
+                                <div class="metric-title">Complexity</div>
+                                <div class="metric-value">${struct.metrics.complexity}</div>
+                            </div>`;
+                            html += '</div>';
+                        }
+                    }
+                    
+                    // Communication Analysis
+                    if (data.communication_analysis) {
+                        const comm = data.communication_analysis;
+                        html += '<h4>💬 Communication Quality</h4>';
+                        html += `<p><strong>Score:</strong> ${(comm.score * 100).toFixed(1)}%</p>`;
+                        html += `<p>${comm.feedback}</p>`;
+                        
+                        if (comm.metrics) {
+                            html += '<div class="metrics">';
+                            html += `<div class="metric-card">
+                                <div class="metric-title">Comments</div>
+                                <div class="metric-value">${comm.metrics.comment_lines}</div>
+                            </div>`;
+                            html += `<div class="metric-card">
+                                <div class="metric-title">Docstrings</div>
+                                <div class="metric-value">${comm.metrics.docstrings}</div>
+                            </div>`;
+                            html += `<div class="metric-card">
+                                <div class="metric-title">Meaningful Names</div>
+                                <div class="metric-value">${comm.metrics.meaningful_variables}</div>
+                            </div>`;
+                            html += '</div>';
+                        }
+                    }
+                    
+                    html += `<div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 8px;">
+                        <strong>Summary:</strong> ${data.summary}
+                    </div>`;
+                    
+                    content.innerHTML = html;
+                    
+                    // Display results
+                    let html = '';
+                    
+                    if (data.overall_score !== undefined) {
+                        const score = data.overall_score;
+                        let scoreClass = 'poor';
+                        if (score >= 0.8) scoreClass = 'excellent';
+                        else if (score >= 0.6) scoreClass = 'good';
+                        else if (score >= 0.4) scoreClass = 'fair';
+                        
+                        html += `<div class="score ${scoreClass}">
+                            Overall Score: ${(score * 100).toFixed(1)}% 
+                            ${score >= 0.8 ? '🌟' : score >= 0.6 ? '👍' : score >= 0.4 ? '⚠️' : '❌'}
+                        </div>`;
+                        
+                        // Structure analysis
+                        if (data.structure_analysis) {
+                            const struct = data.structure_analysis;
+                            html += '<h4>📊 Code Structure Analysis</h4>';
+                            html += `<p><strong>Score:</strong> ${(struct.score * 100).toFixed(1)}%</p>`;
+                            html += `<p>${struct.feedback}</p>`;
+                        }
+                        
+                        // Communication analysis
+                        if (data.communication_analysis) {
+                            const comm = data.communication_analysis;
+                            html += '<h4>💬 Communication Quality</h4>';
+                            html += `<p><strong>Score:</strong> ${(comm.score * 100).toFixed(1)}%</p>`;
+                            html += `<p>${comm.feedback}</p>`;
+                        }
+                        
+                        html += `<div style="margin-top: 20px; padding: 15px; background: #e7f3ff; border-radius: 8px;">
+                            <strong>Summary:</strong> ${data.summary}
+                        </div>`;
+                    }
+                    
+                    content.innerHTML = html;
+                    
+                } catch (error) {
+                    console.error('JavaScript error:', error);
+                    content.innerHTML = `<div class="error">❌ Network error: ${error.message}</div>`;
+                } finally {
+                    button.disabled = false;
+                    button.textContent = '🚀 Evaluate Code Quality';
+                }
+            });
+        });
+        
+        // Add some sample code for testing
+        document.addEventListener('DOMContentLoaded', function() {
+            const sampleCode = `def fibonacci(n):
+    """Calculate the nth Fibonacci number using recursion.
+    
+    Args:
+        n (int): The position in the Fibonacci sequence
+        
+    Returns:
+        int: The nth Fibonacci number
+    """
+    if n <= 1:
+        return n
+    return fibonacci(n-1) + fibonacci(n-2)
+
+def main():
+    """Main function to test fibonacci calculation."""
+    try:
+        # Calculate first 10 Fibonacci numbers
+        for i in range(10):
+            result = fibonacci(i)
+            print(f"F({i}) = {result}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+if __name__ == "__main__":
+    main()`;
+            
+            document.getElementById('code').placeholder = 'Enter your Python code here...
+
+Example:
+' + sampleCode;
+        });
+    </script>
+</body>
+</html>

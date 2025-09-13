@@ -1,0 +1,71 @@
+name: Deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [ main ]
+    paths: 
+      - 'web_dashboard/simple_production.py'
+      - 'requirements-azure.txt'
+      - 'Dockerfile-simple'
+      - '.github/workflows/deploy-azure-simple.yml'
+
+env:
+  AZURE_RESOURCE_GROUP: trustworthy-code-llm-rg
+  AZURE_CONTAINER_REGISTRY: trustworthycodellmacr
+  AZURE_CONTAINER_APP: trustworthy-code-llm
+  AZURE_CONTAINER_ENV: trustworthy-code-env
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🔄 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔐 Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+    - name: 🏗️ Build and push image to ACR
+      run: |
+        az acr build \
+          --registry ${{ env.AZURE_CONTAINER_REGISTRY }} \
+          --image trustworthy-code-llm:${{ github.sha }} \
+          --image trustworthy-code-llm:latest \
+          --file Dockerfile-simple \
+          .
+          
+    - name: 🚀 Deploy to Container Apps
+      run: |
+        az containerapp update \
+          --name ${{ env.AZURE_CONTAINER_APP }} \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/trustworthy-code-llm:${{ github.sha }}
+          
+    - name: 🔍 Get application URL
+      run: |
+        APP_URL=$(az containerapp show \
+          --name ${{ env.AZURE_CONTAINER_APP }} \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --query properties.configuration.ingress.fqdn \
+          --output tsv)
+        echo "🌐 Application URL: https://$APP_URL"
+        echo "🏥 Health Check: https://$APP_URL/health"
+        
+    - name: ✅ Verify deployment
+      run: |
+        APP_URL=$(az containerapp show \
+          --name ${{ env.AZURE_CONTAINER_APP }} \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --query properties.configuration.ingress.fqdn \
+          --output tsv)
+        
+        # Wait for deployment to be ready
+        echo "⏳ Waiting for application to be ready..."
+        sleep 60
+        
+        # Test health endpoint
+        curl -f "https://$APP_URL/health" || exit 1
+        echo "✅ Application is healthy and ready!"
